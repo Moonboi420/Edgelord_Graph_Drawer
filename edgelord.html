@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Graph Theory UI</title>
+<style>
+  body { margin: 0; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+
+<script type="module">
+import * as PIXI from 'https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.mjs';
+
+// Prevent context menu
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+// App initialization
+const app = new PIXI.Application({ backgroundColor: 0x111111, resizeTo: window });
+document.body.appendChild(app.view);
+
+// Node & edge storage
+const nodes = [];
+const edges = [];
+
+// Color list
+const colors = [
+  0xff0000,0x00ff00,0x0000ff,0xffff00,0xff00ff,0x00ffff,
+  0x800000,0x008000,0x000080,0x808000,0x800080,0x008080,
+  0xff8000,0x80ff00,0x0080ff,0xff0080,0x00ff80,0x8080ff,
+  0xff8080,0x80ff80,0x8080ff,0xffff80,0xff80ff,0x80ffff,
+  0xc0c0c0,0x404040,0x804000,0x408000,0x004080,0x800040
+];
+
+// Helper to pick random color from remaining colors
+function getRandomColor() {
+  if (colors.length === 0) return 0xffffff;
+  const idx = Math.floor(Math.random() * colors.length);
+  const color = colors.splice(idx, 1)[0];
+  return color;
+}
+
+// Interaction state
+let draggingEdge = null;
+let edgeStartNode = null;
+
+// Graphics containers
+const edgeContainer = new PIXI.Container();
+const nodeContainer = new PIXI.Container();
+app.stage.addChild(edgeContainer);
+app.stage.addChild(nodeContainer);
+
+// Node creation
+app.view.addEventListener('dblclick', (e) => {
+  const rect = app.view.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const color = getRandomColor();
+  
+  const node = new PIXI.Graphics();
+  node.beginFill(color);
+  node.drawCircle(0, 0, 15);
+  node.endFill();
+  node.x = x;
+  node.y = y;
+  node.interactive = true;
+  node.buttonMode = true;
+  
+  node
+    .on('pointerdown', onNodeDown)
+    .on('pointerup', onNodeUp)
+    .on('rightclick', () => deleteNode(node));
+  
+  nodeContainer.addChild(node);
+  nodes.push(node);
+});
+
+// Node deletion
+function deleteNode(node) {
+  // remove associated edges
+  for (let i = edges.length - 1; i >= 0; i--) {
+    if (edges[i].from === node || edges[i].to === node) {
+      edgeContainer.removeChild(edges[i].line);
+      edges.splice(i, 1);
+    }
+  }
+  nodeContainer.removeChild(node);
+  const idx = nodes.indexOf(node);
+  if (idx >= 0) nodes.splice(idx, 1);
+}
+
+// Node drag start for edge
+function onNodeDown(event) {
+  edgeStartNode = this;
+  draggingEdge = new PIXI.Graphics();
+  draggingEdge.lineStyle(2, 0xffffff);
+  draggingEdge.moveTo(this.x, this.y);
+  draggingEdge.lineTo(this.x, this.y);
+  edgeContainer.addChild(draggingEdge);
+  app.stage.on('pointermove', onDragEdge);
+}
+
+// Node drag end for edge
+function onNodeUp(event) {
+  if (draggingEdge) {
+    const targetNode = getNodeUnderPointer(event.data.global);
+    if (targetNode && targetNode !== edgeStartNode) {
+      createEdge(edgeStartNode, targetNode);
+    }
+    edgeContainer.removeChild(draggingEdge);
+    draggingEdge.destroy();
+    draggingEdge = null;
+    edgeStartNode = null;
+    app.stage.off('pointermove', onDragEdge);
+  }
+}
+
+// Dragging visual
+function onDragEdge(event) {
+  if (!draggingEdge) return;
+  const pos = event.data.global;
+  draggingEdge.clear();
+  draggingEdge.lineStyle(2, 0xffffff);
+  draggingEdge.moveTo(edgeStartNode.x, edgeStartNode.y);
+  draggingEdge.lineTo(pos.x, pos.y);
+}
+
+// Create edge
+function createEdge(fromNode, toNode) {
+    const line = new PIXI.Graphics();
+    line.lineStyle(2, 0xffffff);
+    line.moveTo(fromNode.x, fromNode.y);
+    line.lineTo(toNode.x, toNode.y);
+    edgeContainer.addChild(line);
+
+    edges.push({ from: fromNode, to: toNode, line });
+}
+
+// Listen globally for right-clicks to check edges
+app.view.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const rect = app.view.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    for (let i = edges.length - 1; i >= 0; i--) {
+        const edge = edges[i];
+        if (isPointNearLine(mouseX, mouseY, edge.from.x, edge.from.y, edge.to.x, edge.to.y, 6)) {
+            // Delete edge
+            edgeContainer.removeChild(edge.line);
+            edges.splice(i, 1);
+            break; // delete only one edge at a time
+        }
+    }
+});
+
+// Utility: check if point is within "distance" px of a line segment
+function isPointNearLine(px, py, x1, y1, x2, y2, tolerance) {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const len_sq = C * C + D * D;
+    let param = -1;
+    if (len_sq !== 0) param = dot / len_sq;
+
+    let xx, yy;
+
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+    return (dx * dx + dy * dy) <= tolerance * tolerance;
+}
+
+function deleteEdge(line, hit) {
+  edgeContainer.removeChild(line);
+  edgeContainer.removeChild(hit);
+  const idx = edges.findIndex(e => e.line === line);
+  if (idx >= 0) edges.splice(idx, 1);
+}
+
+// Helper: find node under pointer
+function getNodeUnderPointer(pos) {
+  for (let node of nodes) {
+    const dx = pos.x - node.x;
+    const dy = pos.y - node.y;
+    if (Math.sqrt(dx*dx + dy*dy) <= 15) return node;
+  }
+  return null;
+}
+
+// Update loop to redraw edges
+app.ticker.add(() => {
+  for (let e of edges) {
+    e.line.clear();
+    e.line.lineStyle(2, 0xffffff);
+    e.line.moveTo(e.from.x, e.from.y);
+    e.line.lineTo(e.to.x, e.to.y);
+  }
+});
+</script>
+
+</body>
+</html>

@@ -96,12 +96,12 @@
         });
 
         bg.rect(0, 0, 380, 210).fill(gradient);
-        bg.roundRect(0, 0, 380, 210, 20).stroke({ width: 2.5, color: 0x00aaff, alpha: 0.7 });
-        bg.roundRect(0, 0, 380, 210, 20).stroke({ width: 5, color: 0x00aaff, alpha: 0.15 }); // outer glow
+        bg.roundRect(0, 0, 380, 240, 20).stroke({ width: 2.5, color: 0x00aaff, alpha: 0.7 });
+        bg.roundRect(0, 0, 380, 240, 20).stroke({ width: 5, color: 0x00aaff, alpha: 0.15 }); // outer glow
 
         // inner shine overlay
-        bg.rect(4, 4, 372, 202).fill({ color: 0xffffff, alpha: 0.07 });
-        bg.roundRect(4, 4, 372, 202, 16); // just to clip nicely if needed
+        bg.rect(4, 4, 372, 232).fill({ color: 0xffffff, alpha: 0.07 });
+        bg.roundRect(4, 4, 372, 232, 16); // just to clip nicely if needed
 
         panel.addChild(bg);
 
@@ -126,7 +126,8 @@
         const instrText = `1) Double click to draw a node.
 2) Click and drag to draw an edge.
 3) Right click to delete an element.
-4) Click and hold to label an edge.`;
+4) Left click to change color.
+5) Click and hold to label an edge.`;
 
         const instr = new PIXI.Text({
             text: instrText,

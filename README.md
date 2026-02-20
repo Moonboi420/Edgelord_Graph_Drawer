@@ -1,2 +1,2 @@
-Draw graphs with edge labels, and colors!
+Draw graphs with edge labels and colors!
 Made by grokai :)

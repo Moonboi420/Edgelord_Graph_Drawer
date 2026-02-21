@@ -7,9 +7,12 @@
     <style>
         body { margin:0; overflow:hidden; background:#000; }
         canvas { display:block; }
+        #fileInput { display: none; }
     </style>
 </head>
 <body>
+<input type="file" id="fileInput" accept=".json">
+
 <script type="module">
 (async () => {
     const app = new PIXI.Application();
@@ -45,7 +48,10 @@
     app.stage.hitArea = app.screen;
     app.stage.on('pointertap', onStageTap);
 
-    // ? icon (top-left) – neon style
+    const uiContainer = new PIXI.Container();
+    uiContainer.position.set(10, 10);
+    app.stage.addChild(uiContainer);
+
     const icon = new PIXI.Graphics()
         .circle(0, 0, 18)
         .fill({ color: 0x0a0a1f })
@@ -60,11 +66,51 @@
     icon.cursor = 'pointer';
     icon.position.set(24, 24);
     icon.on('pointertap', toggleInstructions);
-    // subtle pulse
     app.ticker.add(() => {
         icon.scale.set(1 + Math.sin(app.ticker.lastTime * 0.004) * 0.06);
     });
-    app.stage.addChild(icon);
+    uiContainer.addChild(icon);
+
+    const exportBtn = createButton("Export JSON", 0x00ff99, 110, exportGraph);
+    exportBtn.position.set(70, 10);
+    uiContainer.addChild(exportBtn);
+
+    const importBtn = createButton("Import JSON", 0x4488ff, 110, () => {
+        document.getElementById('fileInput').click();
+    });
+    importBtn.position.set(190, 10);
+    uiContainer.addChild(importBtn);
+
+    const clearBtn = createButton("Clear", 0xff3366, 80, clearGraph);
+    clearBtn.position.set(310, 10);
+    uiContainer.addChild(clearBtn);
+
+    document.getElementById('fileInput').addEventListener('change', handleFileImport);
+
+    function createButton(text, color, width, onTap) {
+        const btn = new PIXI.Container();
+        const bg = new PIXI.Graphics()
+            .roundRect(0, 0, width, 36, 8)
+            .fill({ color })
+            .stroke({ width: 1.5, color: 0xffffff, alpha: 0.4 });
+
+        const txt = new PIXI.Text({
+            text,
+            style: new PIXI.TextStyle({
+                fill: 0xffffff,
+                fontSize: 15,
+                fontWeight: 'bold'
+            })
+        });
+        txt.anchor.set(0.5);
+        txt.position.set(width/2, 18);
+
+        btn.addChild(bg, txt);
+        btn.eventMode = 'static';
+        btn.cursor = 'pointer';
+        btn.on('pointertap', onTap);
+        return btn;
+    }
 
     function toggleInstructions() {
         if (instructionsVisible) {
@@ -82,32 +128,27 @@
     function showInstructions() {
         const panel = new PIXI.Container();
 
-        // Background – glassmorphism + neon gradient using FillGradient
-        const bg = new PIXI.Graphics();
-
         const gradient = new PIXI.FillGradient({
             type: 'linear',
             start: { x: 0, y: 0 },
-            end: { x: 380, y: 210 },  // diagonal-ish
+            end: { x: 380, y: 240 },
             colorStops: [
                 { offset: 0, color: 0x1a0033 },
                 { offset: 1, color: 0x001133 }
             ]
         });
 
-        bg.rect(0, 0, 380, 210).fill(gradient);
+        const bg = new PIXI.Graphics();
+        bg.rect(0, 0, 380, 240).fill(gradient);
         bg.roundRect(0, 0, 380, 240, 20).stroke({ width: 2.5, color: 0x00aaff, alpha: 0.7 });
-        bg.roundRect(0, 0, 380, 240, 20).stroke({ width: 5, color: 0x00aaff, alpha: 0.15 }); // outer glow
-
-        // inner shine overlay
+        bg.roundRect(0, 0, 380, 240, 20).stroke({ width: 5, color: 0x00aaff, alpha: 0.15 });
         bg.rect(4, 4, 372, 232).fill({ color: 0xffffff, alpha: 0.07 });
-        bg.roundRect(4, 4, 372, 232, 16); // just to clip nicely if needed
+        bg.roundRect(4, 4, 372, 232, 16);
 
         panel.addChild(bg);
 
-        // Title
         const title = new PIXI.Text({
-            text: "INSTRUCTIONS",
+            text: "HOW TO PLAY",
             style: new PIXI.TextStyle({
                 fill: 0x00ffff,
                 fontSize: 22,
@@ -122,12 +163,7 @@
         title.position.set(30, 24);
         panel.addChild(title);
 
-        // Instructions – updated text
-        const instrText = `1) Double click to draw a node.
-2) Click and drag to draw an edge.
-3) Right click to delete an element.
-4) Left click to change color.
-5) Click and hold to label an edge.`;
+        const instrText = `1) Double click to draw a node.\n2) Click and drag to draw an edge.\n3) Right click to delete an element.\n4) Click and hold to label an edge.`;
 
         const instr = new PIXI.Text({
             text: instrText,
@@ -145,10 +181,9 @@
                 dropShadowDistance: 1.5
             })
         });
-        instr.position.set(34, 68);
+        instr.position.set(34, 78);
         panel.addChild(instr);
 
-        // Close button – neon style
         const closeBtn = new PIXI.Container();
         const closeBg = new PIXI.Graphics()
             .circle(0, 0, 16)
@@ -188,7 +223,6 @@
 
         panel.addChild(closeBtn);
 
-        // subtle entrance animation
         panel.alpha = 0;
         panel.scale.set(0.92);
         panel.position.set(40, 80);
@@ -208,6 +242,103 @@
             requestAnimationFrame(anim);
         };
         anim();
+    }
+
+    function exportGraph() {
+        const data = {
+            nodes: nodes.map(n => ({
+                name: n.name,
+                x: n.pos.x,
+                y: n.pos.y,
+                colorIndex: n.colorIndex
+            })),
+            edges: edges.map(e => ({
+                from: e.from.name,
+                to: e.to.name,
+                colorIndex: e.colorIndex,
+                text: e.text || ""
+            }))
+        };
+
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'graph.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function handleFileImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                clearGraph();
+                importGraph(data);
+            } catch (err) {
+                console.error("Invalid JSON", err);
+                alert("Failed to parse file. Not a valid graph JSON.");
+            }
+        };
+        reader.readAsText(file);
+
+        event.target.value = '';
+    }
+
+    function importGraph(data) {
+        const nodeMap = new Map();
+
+        data.nodes.forEach(nodeData => {
+            const pos = { x: nodeData.x, y: nodeData.y };
+            createNode(pos);
+            const node = nodes[nodes.length - 1];
+            node.name = nodeData.name;
+            node.colorIndex = nodeData.colorIndex ?? 0;
+            updateNodeColor(node);
+            const label = node.labelContainer.children[1];
+            label.text = node.name;
+            const bg = node.labelContainer.children[0];
+            bg.clear();
+            const tempLabel = new PIXI.Text({ text: node.name, style: textStyle });
+            const paddingX = 7, paddingY = 5;
+            const w = tempLabel.width + paddingX * 2;
+            const h = tempLabel.height + paddingY * 2;
+            bg.beginFill(0xffffff, 0.9);
+            bg.drawRoundedRect(-w/2, -h/2, w, h, 8);
+            bg.endFill();
+            nodeMap.set(node.name, node);
+        });
+
+        data.edges.forEach(edgeData => {
+            const from = nodeMap.get(edgeData.from);
+            const to = nodeMap.get(edgeData.to);
+            if (from && to) {
+                createEdge(from, to);
+                const edge = edges[edges.length - 1];
+                edge.colorIndex = edgeData.colorIndex ?? 0;
+                updateEdge(edge.graphic, from.pos, to.pos, colors[edge.colorIndex]);
+                if (edgeData.text) {
+                    updateEdgeLabel(edge, edgeData.text);
+                }
+            }
+        });
+    }
+
+    function clearGraph() {
+        nodes.forEach(n => {
+            n.graphic.destroy();
+            n.labelContainer.destroy();
+        });
+        edges.forEach(e => {
+            e.graphic.destroy();
+            if (e.labelContainer) e.labelContainer.destroy();
+        });
+        nodes = [];
+        edges = [];
     }
 
     function onStageTap(e) {
